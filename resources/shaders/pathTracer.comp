@@ -582,6 +582,8 @@ vec4 trace(Ray ray) {
             info.r = getRsRp(1.0, material.ior, dot(info.normal, wi));
             float theta = 2.0 * PI * rand();
             float intensity = material.intensity;
+            if ((material.flags & MATERIAL_INTENSITY_MAP) != 0)
+                intensity = sampleTexture(material.idxIntensityTex, hit.texCoord).r;
             info.s = vec3(1.0, cos(theta), sin(theta)) * intensity;
             g_polarInfoList[bounces] = info;
 

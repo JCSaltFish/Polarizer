@@ -596,6 +596,8 @@ inline constexpr const char* PATHTRACER_COMP =
     "            info.r = getRsRp(1.0, material.ior, dot(info.normal, wi));\n"
     "            float theta = 2.0 * PI * rand();\n"
     "            float intensity = material.intensity;\n"
+    "            if ((material.flags & MATERIAL_INTENSITY_MAP) != 0)\n"
+    "                intensity = sampleTexture(material.idxIntensityTex, hit.texCoord).r;\n"
     "            info.s = vec3(1.0, cos(theta), sin(theta)) * intensity;\n"
     "            g_polarInfoList[bounces] = info;\n"
     "\n"
