@@ -331,7 +331,7 @@ int PathTracer::getImageData(
     size_t pixelCount =
         static_cast<size_t>(m_resolutionX) * static_cast<size_t>(m_resolutionY);
     std::vector<float> data(pixelCount * 4);
-    pixels.resize(pixelCount * 4 * sizeof(unsigned char));
+    pixels.resize(pixelCount * 4);
     if (m_renderer->getImageData(m_outImage, data.data()))
         return 1;
     for (size_t i = 0; i < pixelCount * 4; i++) {

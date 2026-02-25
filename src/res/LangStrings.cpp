@@ -52,14 +52,14 @@ std::string LangStrings::get(Lang lang) {
     case Lang::EN_US:
         return std::string(
             reinterpret_cast<const char*>(_binary_en_US_json_start),
-            reinterpret_cast<const char*>(_binary_en_US_json_end)
-            - reinterpret_cast<const char*>(_binary_en_US_json_start)
+            reinterpret_cast<const char*>(_binary_en_US_json_end) -
+            reinterpret_cast<const char*>(_binary_en_US_json_start)
         );
     case Lang::ZH_CN:
         return std::string(
             reinterpret_cast<const char*>(_binary_zh_CN_json_start),
-            reinterpret_cast<const char*>(_binary_zh_CN_json_end)
-            - reinterpret_cast<const char*>(_binary_zh_CN_json_start)
+            reinterpret_cast<const char*>(_binary_zh_CN_json_end) -
+            reinterpret_cast<const char*>(_binary_zh_CN_json_start)
         );
     default:
         return "";
