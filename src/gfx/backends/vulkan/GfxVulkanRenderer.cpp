@@ -30,8 +30,7 @@ GfxVulkanRenderer::GfxVulkanRenderer() {
     m_backend = GfxBackend::Vulkan;
 
     int err = 0;
-    GfxScopeGuard errCleaner
-    (
+    GfxScopeGuard errCleaner(
         [&]() {
             if (err > 1) {
                 for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -1791,8 +1790,7 @@ GfxPipeline GfxVulkanRenderer::createPipeline(
         pipelineInfo.renderPass = vulkanRenderPass == nullptr ?
             m_swapchainRenderPass : vulkanRenderPass->m_vkRenderPass;
         pipelineInfo.subpass = 0;
-        result = vkCreateGraphicsPipelines
-        (
+        result = vkCreateGraphicsPipelines(
             s_vkDevice,
             VK_NULL_HANDLE,
             1,
@@ -1805,8 +1803,7 @@ GfxPipeline GfxVulkanRenderer::createPipeline(
         pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
         pipelineInfo.stage = shaderStages[0];
         pipelineInfo.layout = vulkanPipeline->m_vkPipelineLayout;
-        result = vkCreateComputePipelines
-        (
+        result = vkCreateComputePipelines(
             s_vkDevice,
             VK_NULL_HANDLE,
             1,
@@ -1902,8 +1899,7 @@ GfxDescriptorSetBinding GfxVulkanRenderer::createDescriptorSetBinding(
     poolInfo.pPoolSizes = poolSizes.data();
     poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
     poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
-    VkResult result = vkCreateDescriptorPool
-    (
+    VkResult result = vkCreateDescriptorPool(
         s_vkDevice,
         &poolInfo,
         nullptr,
@@ -1942,8 +1938,7 @@ GfxDescriptorSetBinding GfxVulkanRenderer::createDescriptorSetBinding(
 void GfxVulkanRenderer::destroyDescriptorSetBinding(GfxDescriptorSetBinding& binding) const {
     std::shared_ptr<GfxVulkanDescriptorSetBinding> vulkanDescriptorSetBinding =
         std::static_pointer_cast<GfxVulkanDescriptorSetBinding>(binding);
-    vkDestroyDescriptorPool
-    (
+    vkDestroyDescriptorPool(
         s_vkDevice,
         vulkanDescriptorSetBinding->m_vkDescriptorPool,
         nullptr
@@ -2185,8 +2180,7 @@ int GfxVulkanRenderer::beginFrame() {
                 return 1; // Error: Failed to recreate swapchain
             return -1;
         }
-        VkResult result = vkAcquireNextImageKHR
-        (
+        VkResult result = vkAcquireNextImageKHR(
             s_vkDevice,
             m_vkSwapchain,
             UINT64_MAX,

@@ -1197,7 +1197,7 @@ void PathTracerApp::deleteSeletedModels() {
         return;
     }
     DbUtils::TxnGuard txnGuard(db);
-    for (const auto hModel : modelsToDel) {
+    for (const auto& hModel : modelsToDel) {
         if (PtScene::delModel(hScene, hModel) != DB::Result::SUCCESS)
             continue;
     }
@@ -1869,8 +1869,7 @@ void PathTracerApp::handleMeshListEvent(const GuiEvent& event, const DbObjHandle
     }
 }
 
-void PathTracerApp::handleMeshListTextureEvent
-(
+void PathTracerApp::handleMeshListTextureEvent(
     const GuiEvent& event,
     const DbObjHandle& hMaterial
 ) {

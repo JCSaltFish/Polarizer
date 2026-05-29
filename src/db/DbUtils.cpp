@@ -21,8 +21,7 @@ std::string DbFileUtils::createTempFile(const std::string& filename) {
         std::filesystem::remove(tmpFilePath);
 #ifdef _WIN32
     // Add FILE_ATTRIBUTE_TEMPORARY to hint the OS to keep the file in memory if possible
-    HANDLE hFile = CreateFileA
-    (
+    HANDLE hFile = CreateFileA(
         tmpFilePath.string().c_str(),
         GENERIC_WRITE,
         FILE_SHARE_READ,

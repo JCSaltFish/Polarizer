@@ -16,8 +16,7 @@ namespace ImStb {
 #include "utils/Image.h"
 
 // Font data declarations
-extern "C"
-{
+extern "C" {
     extern const unsigned int ForkAwesome_compressed_size;
     extern const unsigned int ForkAwesome_compressed_data[];
     extern const unsigned int SourceSansPro_compressed_size;

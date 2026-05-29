@@ -374,8 +374,7 @@ int Previewer::renderFrame() {
         DepthRange depthRange = DepthRange::MINUS_ONE_TO_ONE;
         if (m_renderer->getBackend() == GfxBackend::Vulkan)
             depthRange = DepthRange::ZERO_TO_ONE;
-        u_xform.proj = perspective
-        (
+        u_xform.proj = perspective(
             PtScene::Camera::FOV * Math::PI / 180.0f,
             float(m_resolutionX) / float(m_resolutionY),
             PtScene::Camera::FOCAL,
