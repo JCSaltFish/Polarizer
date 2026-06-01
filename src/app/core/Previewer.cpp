@@ -179,8 +179,7 @@ int Previewer::loadScene(const DbObjHandle& hScene) {
     return 0;
 }
 
-void Previewer::updateObjects
-(
+void Previewer::updateObjects(
     const std::vector<DbObjHandle>& hObjects,
     bool& resolutionChanged
 ) {
@@ -543,9 +542,7 @@ int Previewer::updateModel(const DbObjHandle& hModel) {
         mesh.id = hMesh.getID();
         m_meshLookup[hMesh.getID()] = &model->meshes.back();
 
-        const auto& meshDataInfo = meshDataInfos[i];
-
-        updateMesh(hMesh, mesh, meshDataInfo);
+        updateMesh(hMesh, mesh, meshDataInfos[i]);
     }
 
     return 0;
@@ -977,8 +974,7 @@ void Previewer::CameraController::clearMovement() {
     m_camMovement = CamMoveDir::NONE;
 }
 
-void Previewer::CameraController::beginRotation
-(
+void Previewer::CameraController::beginRotation(
     const Math::Vec3& rotation,
     const Math::Vec2& mousePos
 ) {
