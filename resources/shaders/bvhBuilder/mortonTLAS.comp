@@ -1,0 +1,139 @@
+/**
+ * @file mortonTLAS.comp
+ * @brief Compute shader for calculating Morton codes for model instances.
+ */
+
+#version 450
+
+layout(local_size_x = 128) in;
+
+/**
+ * @brief Uniform buffer containing global information for BVH construction.
+ */
+layout(binding = 0) uniform BvhGlobal {
+    uint nElements; // Total number of elements
+} u_bvhGlobal; // BVH global information buffer
+
+/**
+ * @brief Struct representing a model instance in the scene.
+ */
+struct ModelRef {
+    uint idxBlasRoot; // Index of the root node of the BLAS tree for this model
+    uint padding[3]; // Padding for alignment
+    vec4 aabbMin; // Minimum corner of the axis-aligned bounding box (AABB) for the instance
+    vec4 aabbMax; // Maximum corner of the axis-aligned bounding box (AABB) for the instance
+    mat4 xform; // Transformation matrix for this instance
+    mat4 invXform; // Inverse transformation matrix for this instance
+};
+/**
+ * @brief Storage buffer for storing the model instances in the scene.
+ */
+layout(binding = 1) buffer ModelRefs {
+    ModelRef modelRefs[]; // Array of model references
+} b_modelRefs; // Model references buffer
+
+/**
+ * @brief Storage buffer for storing the computed axis-aligned bounding box (AABB) of the scene.
+ */
+layout(binding = 3) readonly buffer BoundsUINT {
+    uvec4 minBound; // Minimum bound of the AABB (stored as ordered uints)
+    uvec4 maxBound; // Maximum bound of the AABB (stored as ordered uints)
+} b_boundsUINT; // Bounds buffer
+
+/**
+ * @brief Storage buffer for storing the output element indices after computing Morton codes.
+ */
+layout(binding = 5) writeonly buffer Indices {
+    uint indices[]; // Array of element indices corresponding to the Morton codes
+} b_indices; // Element indices buffer
+/**
+ * @brief Storage buffer for storing the computed Morton codes for each triangle.
+ */
+layout(binding = 6) writeonly buffer Mortons {
+    uint codes[]; // Array of Morton codes corresponding to the triangle indices
+} b_mortons; // Morton codes buffer
+
+const float EPS = 0.00001; // Small epsilon value
+
+/**
+ * @brief Converts an ordered unsigned integer back to a floating-point value.
+ *
+ * This function takes an ordered unsigned integer, which is used for atomic operations in the
+ * bounding box computation, and converts it back to a floating-point value. The conversion
+ * accounts for the ordering of the bits to ensure that the resulting float is correctly
+ * reconstructed.
+ *
+ * @param v The ordered unsigned integer to be converted.
+ * @return The corresponding floating-point value.
+ */
+float orderedUintToFloat(uint v) {
+    return (v & 0x80000000u) != 0u ? uintBitsToFloat(v & 0x7FFFFFFFu) : uintBitsToFloat(~v);
+}
+
+/**
+ * @brief Expands a 10-bit integer into a 30-bit integer by inserting two zeros between each bit.
+ *
+ * This function takes a 10-bit integer and expands it to a 30-bit integer by interleaving zeros
+ * between the bits. This is used for computing Morton codes for spatial indexing.
+ *
+ * @param v The input 10-bit integer to be expanded.
+ * @return The expanded 30-bit integer with interleaved zeros.
+ */
+uint expandBits(uint v) {
+    v = (v * 0x00010001u) & 0xFF0000FFu;
+    v = (v * 0x00000101u) & 0x0F00F00Fu;
+    v = (v * 0x00000011u) & 0xC30C30C3u;
+    v = (v * 0x00000005u) & 0x49249249u;
+    return v;
+}
+
+/**
+ * @brief Computes the 30-bit Morton code for a 3D point normalized to the unit cube.
+ *
+ * This function takes a 3D point with coordinates in the range [0, 1] and computes its Morton code
+ * by expanding each coordinate into a 10-bit integer and interleaving the bits. The resulting
+ * Morton code is a 30-bit integer that can be used for spatial indexing.
+ *
+ * @param v The input 3D point with coordinates in the range [0, 1].
+ * @return The computed 30-bit Morton code for the input point.
+ */
+uint morton3D(vec3 v) {
+    v = clamp(v * 1024.0, 0.0, 1023.0);
+
+    uint xx = expandBits(uint(v.x));
+    uint yy = expandBits(uint(v.y));
+    uint zz = expandBits(uint(v.z));
+
+    return (xx << 2) | (yy << 1) | zz;
+}
+
+void main() {
+    uint gid = gl_GlobalInvocationID.x;
+    if (gid >= u_bvhGlobal.nElements)
+        return;
+
+    ModelRef ref = b_modelRefs.modelRefs[gid];
+    vec3 bmin = ref.aabbMin.xyz;
+    vec3 bmax = ref.aabbMax.xyz;
+
+    vec3 minBound = vec3(
+        orderedUintToFloat(b_boundsUINT.minBound.x),
+        orderedUintToFloat(b_boundsUINT.minBound.y),
+        orderedUintToFloat(b_boundsUINT.minBound.z)
+    );
+    vec3 maxBound = vec3(
+        orderedUintToFloat(b_boundsUINT.maxBound.x),
+        orderedUintToFloat(b_boundsUINT.maxBound.y),
+        orderedUintToFloat(b_boundsUINT.maxBound.z)
+    );
+
+    vec3 extent = maxBound - minBound;
+    extent = max(extent, vec3(EPS)); // Avoid division by zero
+    vec3 center = (bmin + bmax) * 0.5;
+    vec3 norm = (center - minBound) / extent;
+
+    uint morton = morton3D(norm);
+
+    b_indices.indices[gid] = gid;
+    b_mortons.codes[gid] = morton;
+}

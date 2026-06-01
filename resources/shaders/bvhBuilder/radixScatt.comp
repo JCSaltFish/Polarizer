@@ -1,0 +1,114 @@
+/**
+ * @file radixScatt.comp
+ * @brief Compute shader for scattering Morton codes into buckets based on current radix pass.
+ */
+
+#version 450
+
+layout(local_size_x = 256) in;
+
+/**
+ * @brief Uniform buffer containing global information for BVH construction.
+ */
+layout(binding = 0) uniform BvhGlobal {
+    uint nElements; // Total number of elements
+} u_bvhGlobal; // BVH global information buffer
+
+/**
+ * @brief Uniform buffer containing information about the current radix pass.
+ */
+layout(binding = 4) uniform RadixInfo {
+    uint shift; // Number of bits to shift for the current radix pass
+} u_radixInfo; // Radix information buffer
+
+/**
+ * @brief Storage buffer for storing the input elements indices.
+ */
+layout(binding = 5) readonly buffer IndicesIn {
+    uint indices[]; // Array of elements indices
+} b_indicesIn; // Elements indices input buffer
+/**
+ * @brief Storage buffer for storing the input Morton codes for each elements.
+ */
+layout(binding = 6) readonly buffer MortonsIn {
+    uint codes[]; // Array of Morton codes corresponding to the elements indices
+} b_mortonsIn; // Morton codes input buffer
+/**
+ * @brief Storage buffer for storing the output elements indices after scattering.
+ */
+layout(binding = 7) buffer IndicesOut {
+    uint indices[]; // Array of elements indices after scattering
+} b_indicesOut; // Elements indices output buffer
+/**
+ * @brief Storage buffer for storing the output Morton codes after scattering.
+ */
+layout(binding = 8) buffer MortonsOut {
+    uint codes[]; // Array of Morton codes after scattering
+} b_mortonsOut; // Morton codes output buffer
+
+/**
+ * @brief Storage buffer for storing the histogram bins.
+ */
+layout(binding = 9) buffer Histogram {
+    uint bins[]; // Array of histogram bins
+} b_histogram; // Histogram buffer
+
+/**
+ * @brief Storage buffer for storing the base offsets for each bucket in the histogram.
+ */
+layout(binding = 10) buffer BucketBase {
+    uint base[64]; // Array of base offsets for each bucket
+} b_bucketBase; // Bucket base buffer
+
+/**
+ * @brief Storage buffer for storing the offsets for each bucket in the histogram.
+ */
+layout(binding = 11) buffer Offsets {
+    uint offsets[]; // Array of offsets for each bucket
+} b_offsets; // Offsets buffer
+
+shared uint s_localHist[64]; // Shared array for storing the local histogram
+shared uint s_blockOffset[64]; // Shared array for storing the block offsets for each bucket
+shared uint s_offsets[64]; // Shared array for storing the offsets from the global offsets buffer
+
+void main() {
+    uint lid = gl_LocalInvocationID.x;
+    uint gid = gl_GlobalInvocationID.x;
+    uint block = gl_WorkGroupID.x;
+
+    // The first 64 threads in each workgroup load the histogram bins and offsets
+    // for their block into shared memory.
+    if (lid < 64) {
+        uint idx = block * 64 + lid;
+        s_localHist[lid] = b_histogram.bins[idx];
+        s_offsets[lid] = b_offsets.offsets[idx];
+    }
+    barrier();
+
+    // The first thread in the workgroup computes the block offsets for each bucket
+    // based on the local histogram.
+    if (lid == 0) {
+        uint sum = 0;
+        for (uint b = 0; b < 64; ++b) {
+            s_blockOffset[b] = sum;
+            sum += s_localHist[b];
+        }
+    }
+    barrier();
+
+    if (gid >= u_bvhGlobal.nElements)
+        return;
+
+    // Each thread processes one element and scatters it to the correct position
+    // in the output buffer.
+    uint idxTri = b_indicesIn.indices[gid];
+    uint code = b_mortonsIn.codes[gid];
+
+    uint bucket = (code >> u_radixInfo.shift) & 63;
+    uint bucketBase = b_bucketBase.base[bucket];
+    uint offset = s_offsets[bucket];
+    uint index = bucketBase + offset + atomicAdd(s_blockOffset[bucket], 1);
+
+    b_mortonsOut.codes[index] = code;
+    b_indicesOut.indices[index] = idxTri;
+}

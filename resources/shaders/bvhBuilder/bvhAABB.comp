@@ -1,0 +1,82 @@
+/**
+ * @file bvhAABB.comp
+ * @brief Compute shader for calculating the axis-aligned bounding boxes (AABBs) of BVH nodes.
+ */
+
+#version 450
+
+layout(local_size_x = 256) in;
+
+/**
+ * @brief Uniform buffer containing global information for BVH construction.
+ */
+layout(binding = 0) uniform BvhGlobal {
+    uint nElements; // Total number of elements
+} u_bvhGlobal; // BVH global information buffer
+
+/**
+ * @brief Storage buffer for counting the number of visits to each node.
+ */
+layout(binding = 12) buffer NodeVisits {
+    int visits[]; // Array of visit counts for each node
+} b_nodeVisits; // Node visit counts buffer
+
+/**
+ * @brief Struct representing a node in the BVH tree.
+ */
+struct BvhNode {
+    int idxLeft; // Index of the left child node
+    int idxRight; // Index of the right child node
+    int idxParent; // Index of the parent node
+    int idxTriangle; // Index of the triangle for leaf nodes
+
+    vec4 aabbMin; // Minimum corner of the axis-aligned bounding box (AABB) for the node
+    vec4 aabbMax; // Maximum corner of the axis-aligned bounding box (AABB) for the node
+};
+/**
+ * @brief Storage buffer for storing the BVH nodes of the tree.
+ */
+layout(binding = 13) buffer BvhNodes {
+    BvhNode nodes[]; // Array of BVH nodes representing the internal structure of the BVH tree
+} b_bvhNodes; // BVH nodes buffer
+
+void main() {
+    uint gid = gl_GlobalInvocationID.x;
+    uint N = u_bvhGlobal.nElements;
+
+    if (gid >= N)
+        return;
+
+    int node = int(gid) + int(N - 1);
+
+    while (true) {
+        int parent = b_bvhNodes.nodes[node].idxParent;
+        if (parent == -1)
+            break;
+
+        // Atomically increment the visit count for the parent node
+        // and check if it's the first visit
+        int old = atomicAdd(b_nodeVisits.visits[parent], 1);
+        if (old == 0)
+            break;
+
+        int left  = b_bvhNodes.nodes[parent].idxLeft;
+        int right = b_bvhNodes.nodes[parent].idxRight;
+
+        vec4 minL = b_bvhNodes.nodes[left].aabbMin;
+        vec4 maxL = b_bvhNodes.nodes[left].aabbMax;
+
+        vec4 minR = b_bvhNodes.nodes[right].aabbMin;
+        vec4 maxR = b_bvhNodes.nodes[right].aabbMax;
+
+        vec4 newMin = min(minL, minR);
+        vec4 newMax = max(maxL, maxR);
+
+        b_bvhNodes.nodes[parent].aabbMin = newMin;
+        b_bvhNodes.nodes[parent].aabbMax = newMax;
+
+        memoryBarrierBuffer();
+
+        node = parent;
+    }
+}

@@ -1,0 +1,49 @@
+/**
+ * @file radixPrefix.comp
+ * @brief Compute shader for performing the prefix sum (exclusive scan) on the histogram bins.
+ */
+
+#version 450
+
+layout(local_size_x = 64) in;
+
+/**
+ * @brief Uniform buffer containing global information for BVH construction.
+ */
+layout(binding = 0) uniform BvhGlobal {
+    uint nElements; // Total number of elements
+} u_bvhGlobal; // BVH global information buffer
+
+/**
+ * @brief Uniform buffer containing information about the current radix pass.
+ */
+layout(binding = 4) uniform RadixInfo {
+    uint shift; // Number of bits to shift for the current radix pass
+} u_radixInfo; // Radix information buffer
+
+/**
+ * @brief Storage buffer for storing the histogram bins.
+ */
+layout(binding = 9) buffer Histogram {
+    uint bins[]; // Array of histogram bins
+} b_histogram; // Histogram buffer
+
+/**
+ * @brief Storage buffer for storing the offsets for each bucket in the histogram.
+ */
+layout(binding = 11) buffer Offsets {
+    uint offsets[]; // Array of offsets for each bucket
+} b_offsets; // Offsets buffer
+
+void main() {
+    uint bucket = gl_LocalInvocationID.x;
+    uint nBlocks = (u_bvhGlobal.nElements + 255) / 256;
+
+    uint sum = 0;
+    for (uint block = 0; block < nBlocks; ++block) {
+        uint idx = block * 64 + bucket;
+        uint hist = b_histogram.bins[idx];
+        b_offsets.offsets[idx] = sum;
+        sum += hist;
+    }
+}

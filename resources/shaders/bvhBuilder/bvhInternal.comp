@@ -1,0 +1,148 @@
+/**
+ * @file bvhInternal.comp
+ * @brief Compute shader for constructing the internal nodes of a BVH tree using Morton codes.
+ */
+
+#version 450
+
+layout(local_size_x = 256) in;
+
+/**
+ * @brief Uniform buffer containing global information for BVH construction.
+ */
+layout(binding = 0) uniform BvhGlobal {
+    uint nElements; // Total number of elements
+} u_bvhGlobal; // BVH global information buffer
+
+/**
+ * @brief Storage buffer for storing the input Morton codes for each triangle.
+ */
+layout(binding = 8) readonly buffer MortonsIn {
+    uint codes[]; // Array of Morton codes corresponding to the triangle indices
+} b_mortonsIn; // Morton codes input buffer
+
+/**
+ * @brief Struct representing a node in the BVH tree.
+ */
+struct BvhNode {
+    int idxLeft; // Index of the left child node
+    int idxRight; // Index of the right child node
+    int idxParent; // Index of the parent node
+    int idxElement; // Index of the element for leaf nodes
+
+    vec4 aabbMin; // Minimum corner of the axis-aligned bounding box (AABB) for the node
+    vec4 aabbMax; // Maximum corner of the axis-aligned bounding box (AABB) for the node
+};
+/**
+ * @brief Storage buffer for storing the BVH nodes of the tree.
+ */
+layout(binding = 13) buffer BvhNodes {
+    BvhNode nodes[]; // Array of BVH nodes representing the internal structure of the BVH tree
+} b_bvhNodes; // BVH nodes buffer
+
+/**
+ * @brief Function to compute the longest common prefix (LCP) between two Morton codes.
+ * @param i Index of the first Morton code.
+ * @param j Index of the second Morton code.
+ * @param N Total number of triangles (size of the Morton codes array).
+ * @return Length of the longest common prefix between two Morton codes, or -1 if invalid indices.
+ */
+int lcp(int i, int j, uint N) {
+    if (i == j)
+        return 32;
+    if (j < 0 || j >= int(N))
+        return -1;
+
+    uint a = b_mortonsIn.codes[i];
+    uint b = b_mortonsIn.codes[j];
+    uint diff = a ^ b;
+
+    if (diff != 0)
+        return 31 - int(findMSB(diff));
+    uint idxDiff = uint(i ^ j);
+    return 32 + (31 - int(findMSB(idxDiff)));
+}
+
+void main() {
+    int i = int(gl_GlobalInvocationID.x);
+    int N = int(u_bvhGlobal.nElements);
+
+    if (i == 0)
+        b_bvhNodes.nodes[0].idxParent = -1;
+
+    if (i >= N - 1)
+        return;
+
+    // ----------------------------------
+    // Step 1: determine direction
+    // ----------------------------------
+
+    int lcpL = lcp(i, i - 1, N);
+    int lcpR = lcp(i, i + 1, N);
+
+    int d = (lcpR > lcpL) ? 1 : -1;
+
+    int deltaMin = min(lcpL, lcpR);
+
+    // ----------------------------------
+    // Step 2: find range (exponential + binary search)
+    // ----------------------------------
+
+    int lmax = 2;
+    while (lcp(i, i + lmax * d, N) > deltaMin)
+        lmax *= 2;
+
+    int l = 0;
+    for (int t = lmax / 2; t > 0; t /= 2) {
+        if (lcp(i, i + (l + t) * d, N) > deltaMin)
+            l += t;
+    }
+
+    int j = i + l * d;
+
+    int first = min(i, j);
+    int last  = max(i, j);
+
+    // ----------------------------------
+    // Step 3: find split
+    // ----------------------------------
+
+    int deltaNode = lcp(first, last, N);
+
+    int split = first;
+    int stride = last - first;
+
+    do {
+        stride = (stride + 1) >> 1;
+        int mid = split + stride;
+        if (mid < last) {
+            if (lcp(first, mid, N) > deltaNode)
+                split = mid;
+        }
+    } while (stride > 1);
+
+    // ----------------------------------
+    // Step 4: assign children
+    // ----------------------------------
+
+    int leftChild = 0, rightChild = 0;
+
+    if (split == first)
+        leftChild = split + (N - 1); // leaf
+    else
+        leftChild = split;
+
+    if (split + 1 == last)
+        rightChild = split + 1 + (N - 1); // leaf
+    else
+        rightChild = split + 1;
+
+    // write node
+    b_bvhNodes.nodes[i].idxLeft = leftChild;
+    b_bvhNodes.nodes[i].idxRight = rightChild;
+    b_bvhNodes.nodes[i].idxElement = -1; // internal node
+
+    // set parent
+    b_bvhNodes.nodes[leftChild].idxParent = i;
+    b_bvhNodes.nodes[rightChild].idxParent = i;
+}

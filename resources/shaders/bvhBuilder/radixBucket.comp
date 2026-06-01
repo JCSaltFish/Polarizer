@@ -1,0 +1,57 @@
+/**
+ * @file radixBucket.comp
+ * @brief Compute shader for computing the base offsets for each bucket in radix sort algorithm.
+ */
+
+#version 450
+
+layout(local_size_x = 64) in;
+
+/**
+ * @brief Uniform buffer containing global information for BVH construction.
+ */
+layout(binding = 0) uniform BvhGlobal {
+    uint nElements; // Total number of elements
+} u_bvhGlobal; // BVH global information buffer
+
+/**
+ * @brief Uniform buffer containing information about the current radix pass.
+ */
+layout(binding = 4) uniform RadixInfo {
+    uint shift; // Number of bits to shift for the current radix pass
+} u_radixInfo; // Radix information buffer
+
+/**
+ * @brief Storage buffer for storing the histogram bins.
+ */
+layout(binding = 9) buffer Histogram {
+    uint bins[]; // Array of histogram bins
+} b_histogram; // Histogram buffer
+
+/**
+ * @brief Storage buffer for storing the base offsets for each bucket in the histogram.
+ */
+layout(binding = 10) buffer BucketBase {
+    uint base[64]; // Array of base offsets for each bucket
+} b_bucketBase; // Bucket base buffer
+
+shared uint s_sum[64]; // Shared array for storing the sum of histogram bins for each bucket.
+
+void main() {
+    uint lid = gl_LocalInvocationID.x;
+    uint nBlocks = (u_bvhGlobal.nElements + 255) / 256;
+
+    // Each thread computes the sum of the histogram bins for its corresponding bucket.
+    uint sum = 0;
+    for (uint block = 0; block < nBlocks; ++block)
+        sum += b_histogram.bins[block * 64 + lid];
+    s_sum[lid] = sum;
+    barrier();
+
+    // The first thread computes the prefix sum (exclusive scan) of the histogram bins
+    // to determine the base offset for each bucket.
+    uint prefix = 0;
+    for (uint i = 0; i < lid; ++i)
+        prefix += s_sum[i];
+    b_bucketBase.base[lid] = prefix;
+}
